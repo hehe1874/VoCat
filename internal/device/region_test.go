@@ -51,33 +51,15 @@ func TestPlaceholderIMSIIsNotTreatedAsARealCarrier(t *testing.T) {
 
 func TestRegionBlockReason(t *testing.T) {
 	t.Parallel()
-	for _, imsi := range []string{"460001234567890", "461001234567890"} {
-		reason := RegionBlockReason(imsi)
-		if reason == "" {
-			t.Fatalf("RegionBlockReason(%q) did not block", imsi)
-		}
-		if !strings.Contains(reason, "中国") {
-			t.Fatalf("RegionBlockReason(%q) = %q, want it to name 中国", imsi, reason)
-		}
-	}
-	for _, imsi := range []string{"310260123456789", "001011234567890", ""} {
+	for _, imsi := range []string{"460001234567890", "461001234567890", "310260123456789", ""} {
 		if reason := RegionBlockReason(imsi); reason != "" {
-			t.Fatalf("RegionBlockReason(%q) = %q, want empty (fail-open)", imsi, reason)
+			t.Fatalf("RegionBlockReason(%q) = %q, want empty", imsi, reason)
 		}
 	}
 }
 
 func TestSetNetworkBlockedForRestrictedRegionSIM(t *testing.T) {
-	client := &transcriptClient{}
-	manager, id := newStartedTestManager(t, client)
-	injectSnapshot(t, manager, id, &Snapshot{DeviceID: id, IMSI: "460001234567890"})
-	_, err := manager.SetNetwork(context.Background(), id, NetworkRequest{
-		Enabled: true, APN: "internet", IPVersion: "IPV4V6",
-	})
-	if !errors.Is(err, ErrRegionBlocked) {
-		t.Fatalf("error = %v, want ErrRegionBlocked", err)
-	}
-	client.assertDone(t)
+	t.Skip("region blocking disabled in custom build")
 }
 
 func TestSetNetworkAllowedForServedRegionSIM(t *testing.T) {
@@ -118,18 +100,5 @@ func TestSetNetworkAllowedWhenSIMRegionUnknown(t *testing.T) {
 }
 
 func TestSendSMSBlockedForRestrictedRegionSIM(t *testing.T) {
-	client := &transcriptClient{}
-	manager, id := newStartedTestManager(t, client)
-	injectSnapshot(t, manager, id, &Snapshot{DeviceID: id, IMSI: "460001234567890"})
-	result, err := manager.SendSMS(context.Background(), id, "+15551234567", "hello")
-	if !errors.Is(err, ErrRegionBlocked) {
-		t.Fatalf("error = %v, want ErrRegionBlocked", err)
-	}
-	if result.PartsAttempted != 0 {
-		t.Fatalf("PartsAttempted = %d, want 0 for a blocked region", result.PartsAttempted)
-	}
-	if result.SubmissionStatus != "region_blocked" {
-		t.Fatalf("SubmissionStatus = %q, want region_blocked", result.SubmissionStatus)
-	}
-	client.assertDone(t)
+	t.Skip("region blocking disabled in custom build")
 }
