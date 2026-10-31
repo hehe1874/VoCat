@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
-
-	"vocat/internal/i18n"
 )
 
 // BlockedMCCs lists the mobile country codes whose SIM cards must not be
