@@ -2,9 +2,16 @@ name: docker
 
 on:
   push:
+    branches:
+      - custom
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image version tag (e.g. 0.3.36-custom, leave empty for auto)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -18,23 +25,11 @@ env:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            arch: amd64
-          - platform: linux/arm64
-            arch: arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Set up QEMU
-        if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@v4
         with:
-          platforms: arm64
+          fetch-depth: 0
 
       - name: Pull BuildKit with retry
         run: bash scripts/ci-pull-image.sh "$BUILDKIT_IMAGE"
@@ -44,26 +39,24 @@ jobs:
         with:
           driver-opts: image=${{ env.BUILDKIT_IMAGE }}
 
-      - name: Build ${{ matrix.platform }} smoke image
+      - name: Build amd64 smoke image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64
           load: true
           push: false
-          tags: vocat-smoke:${{ matrix.arch }}
+          tags: vocat-smoke:amd64
           build-args: |
             VERSION=0.0.0-smoke
             BUILD_TIME=${{ github.event.repository.updated_at }}
           cache-from: type=gha
 
-      - name: Verify ${{ matrix.platform }} runtime, QMI, and smart-card stack
+      - name: Verify runtime, QMI, and smart-card stack
         run: |
-          docker run --rm --platform '${{ matrix.platform }}' \
-            vocat-smoke:${{ matrix.arch }} version
-          docker run --rm --platform '${{ matrix.platform }}' \
-            --entrypoint /bin/sh vocat-smoke:${{ matrix.arch }} -c \
+          docker run --rm vocat-smoke:amd64 version
+          docker run --rm --entrypoint /bin/sh vocat-smoke:amd64 -c \
             'command -v qmicli && command -v qmi-network && command -v pcscd && test -d /usr/lib/pcsc/drivers'
 
   build-and-push:
@@ -72,18 +65,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Lowercase repository owner for ghcr.io
         id: repo
         run: echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-      - name: Derive version from tag
+      - name: Derive version
         id: version
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            TAG_VER="${GITHUB_REF_NAME#v}"
+            echo "version=${TAG_VER}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
           else
-            echo "version=0.0.0-dev" >> "$GITHUB_OUTPUT"
+            LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1 2>/dev/null) 2>/dev/null || echo "v0.3.36")
+            echo "version=${LATEST_TAG#v}-custom" >> "$GITHUB_OUTPUT"
           fi
           echo "build_time=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
 
