@@ -1,0 +1,47 @@
+name: sync-upstream
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # Daily at 02:00 UTC (10:00 AM Beijing time)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/MengMengCode/VoCat.git
+          git fetch upstream master --tags
+
+      - name: Update master branch
+        run: |
+          git checkout master
+          git merge --ff-only upstream/master
+          git push origin master --tags
+
+      - name: Merge upstream into custom
+        run: |
+          git checkout custom
+          # Check if there are upstream changes not yet in custom
+          BEHIND_COUNT=$(git rev-list --count custom..master)
+          if [ "$BEHIND_COUNT" -gt 0 ]; then
+            echo "Found $BEHIND_COUNT new commits in master, merging into custom..."
+            git merge master -m "chore(sync): merge upstream master into custom"
+            git push origin custom
+          else
+            echo "custom branch is already up to date with master."
+          fi
